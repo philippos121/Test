@@ -1,10 +1,28 @@
 # 🎯 START HERE - MiniLLM iOS
 
-Get MiniLLM running on your iPhone in **2 minutes** with one command!
+Get MiniLLM running on your iPhone in **5 minutes** - **no Mac needed!**
 
 ---
 
 ## ⚡ Ultra-Quick Start
+
+### 🌟 NEW: Using **iSH on iPhone** (No Mac Required!)
+
+```bash
+# In iSH on your iPhone:
+cd /root
+git clone <YOUR_REPO_URL>
+cd MiniLLM-iOS
+./deploy_ish.sh
+```
+
+Choose option **1** (Cloud Build) → Follow prompts → Get IPA → Install with AltStore!
+
+See: **[ISH_DEPLOY.md](ISH_DEPLOY.md)** for complete guide
+
+**Time: 5 minutes total** ⚡
+
+---
 
 ### If you're on a **Mac** with Xcode:
 
@@ -16,6 +34,8 @@ cd MiniLLM-iOS
 **Done!** The app will automatically build and launch on your iPhone (or Simulator).
 
 See: **[DEPLOY.md](DEPLOY.md)** for details
+
+**Time: 2 minutes** ⏱️
 
 ---
 
@@ -35,6 +55,8 @@ cd ~/Desktop/MiniLLM-iOS
 ```
 
 See: **[DEPLOY.md](DEPLOY.md)** for details
+
+**Time: 10 minutes** ⏱️
 
 ---
 
