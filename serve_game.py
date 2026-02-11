@@ -24,12 +24,29 @@ def get_local_ip():
 class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
-        super().end_headers()
+        try:
+            super().end_headers()
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # Client closed connection early, ignore
+
+    def log_message(self, format, *args):
+        # Only log successful requests, suppress errors
+        if args[1] == '200':
+            print(f"✓ Served {args[0]} to {self.client_address[0]}")
 
 if __name__ == "__main__":
     Handler = MyHTTPRequestHandler
 
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+    class QuietTCPServer(socketserver.TCPServer):
+        def handle_error(self, request, client_address):
+            # Suppress BrokenPipeError and ConnectionResetError
+            import sys
+            exc_type = sys.exc_info()[0]
+            if exc_type in (BrokenPipeError, ConnectionResetError):
+                return
+            super().handle_error(request, client_address)
+
+    with QuietTCPServer(("", PORT), Handler) as httpd:
         local_ip = get_local_ip()
         print("=" * 60)
         print(f"Tennis Game Server Running!")
