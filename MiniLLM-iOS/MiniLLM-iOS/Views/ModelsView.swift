@@ -23,15 +23,25 @@ struct ModelsView: View {
                     Text("Current Model")
                 }
 
-                Section {
-                    ForEach(modelManager.availableModels) { model in
-                        ModelRow(model: model)
+                ForEach(LLMModel.ModelCategory.allCases, id: \.self) { category in
+                    let categoryModels = modelManager.availableModels.filter { $0.category == category }
+                    if !categoryModels.isEmpty {
+                        Section {
+                            ForEach(categoryModels) { model in
+                                ModelRow(model: model)
+                            }
+                        } header: {
+                            Text("\(category.rawValue) Models")
+                        } footer: {
+                            if category == .tiny {
+                                Text("Best for quick responses and low memory usage")
+                                    .font(.caption)
+                            } else if category == .medium {
+                                Text("Higher quality but requires more memory and storage")
+                                    .font(.caption)
+                            }
+                        }
                     }
-                } header: {
-                    Text("Available Models")
-                } footer: {
-                    Text("Models are quantized for efficient on-device inference")
-                        .font(.caption)
                 }
             }
             .navigationTitle("Models")

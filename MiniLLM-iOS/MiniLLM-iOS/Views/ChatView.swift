@@ -11,6 +11,7 @@ struct ChatView: View {
     @State private var inputText = ""
     @State private var isGenerating = false
     @State private var showSettings = false
+    @State private var showExportSheet = false
 
     @State private var temperature: Double = 0.7
     @State private var maxTokens: Int = 512
@@ -18,6 +19,27 @@ struct ChatView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Model indicator
+                if let model = modelManager.currentModel {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                        Text(model.displayName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        if !messages.isEmpty {
+                            Text("\(messages.count) messages")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+                    .background(Color(.secondarySystemBackground))
+                }
+
                 // Messages list
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -76,25 +98,41 @@ struct ChatView: View {
             .navigationTitle("Chat")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showSettings.toggle()
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                    }
-                }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Menu {
+                        Button {
+                            showSettings.toggle()
+                        } label: {
+                            Label("Settings", systemImage: "slider.horizontal.3")
+                        }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        messages.removeAll()
+                        Button {
+                            showExportSheet = true
+                        } label: {
+                            Label("Export Chat", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(messages.isEmpty)
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            messages.removeAll()
+                        } label: {
+                            Label("Clear Chat", systemImage: "trash")
+                        }
+                        .disabled(messages.isEmpty)
                     } label: {
-                        Image(systemName: "trash")
+                        Image(systemName: "ellipsis.circle")
                     }
-                    .disabled(messages.isEmpty)
                 }
             }
             .sheet(isPresented: $showSettings) {
                 ChatSettingsView(temperature: $temperature, maxTokens: $maxTokens)
+            }
+            .sheet(isPresented: $showExportSheet) {
+                if let exportURL = createExportFile() {
+                    ShareSheet(activityItems: [exportURL])
+                }
             }
         }
     }
@@ -119,6 +157,34 @@ struct ChatView: View {
             isGenerating = false
         }
     }
+
+    private func createExportFile() -> URL? {
+        let exportData = messages.map { msg in
+            ["role": msg.role, "content": msg.content,
+             "timestamp": ISO8601DateFormatter().string(from: msg.timestamp)]
+        }
+
+        guard let jsonData = try? JSONSerialization.data(
+            withJSONObject: [
+                "messages": exportData,
+                "model": modelManager.currentModel?.displayName ?? "Unknown"
+            ],
+            options: .prettyPrinted
+        ) else { return nil }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("minillm_chat_\(Int(Date().timeIntervalSince1970)).json")
+        try? jsonData.write(to: tempURL)
+        return tempURL
+    }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 struct MessageBubble: View {
@@ -136,10 +202,18 @@ struct MessageBubble: View {
                     .background(message.role == "user" ? Color.blue : Color.secondary.opacity(0.2))
                     .foregroundColor(message.role == "user" ? .white : .primary)
                     .cornerRadius(16)
+                    .textSelection(.enabled)
 
                 Text(message.timestamp.formatted(date: .omitted, time: .shortened))
                     .font(.caption2)
                     .foregroundColor(.secondary)
+            }
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = message.content
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
             }
 
             if message.role == "assistant" {

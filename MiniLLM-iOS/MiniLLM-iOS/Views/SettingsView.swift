@@ -16,7 +16,7 @@ struct SettingsView: View {
                     HStack {
                         Text("App Version")
                         Spacer()
-                        Text("1.0.0")
+                        Text("1.1.0")
                             .foregroundColor(.secondary)
                     }
 
@@ -24,6 +24,14 @@ struct SettingsView: View {
                         Text("Model Loaded")
                         Spacer()
                         Text(modelManager.currentModel?.displayName ?? "None")
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack {
+                        Text("Models Downloaded")
+                        Spacer()
+                        let downloaded = modelManager.availableModels.filter { $0.isDownloaded }.count
+                        Text("\(downloaded) / \(modelManager.availableModels.count)")
                             .foregroundColor(.secondary)
                     }
                 } header: {
@@ -44,6 +52,19 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("System")
+                }
+
+                Section {
+                    NavigationLink {
+                        ISHInfoView()
+                    } label: {
+                        Label("Install via iSH", systemImage: "terminal")
+                    }
+                } header: {
+                    Text("Alternative Install")
+                } footer: {
+                    Text("Run MiniLLM as a terminal app directly in iSH shell")
+                        .font(.caption)
                 }
 
                 Section {
@@ -93,16 +114,65 @@ struct SettingsView: View {
     }
 
     private func clearAllData() {
-        // Clear all models
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         try? FileManager.default.removeItem(at: documentsPath.appendingPathComponent("models"))
         try? FileManager.default.removeItem(at: documentsPath.appendingPathComponent("adapters"))
-
-        // Clear user defaults
         UserDefaults.standard.removeObject(forKey: "downloadedModels")
-
-        // Unload current model
         modelManager.unloadModel()
+    }
+}
+
+struct ISHInfoView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Run MiniLLM in iSH")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Text("iSH provides an Alpine Linux terminal on your iPhone. You can run a full Python-based MiniLLM directly in it.")
+                    .foregroundColor(.secondary)
+
+                GroupBox("Quick Install") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("1. Install iSH from the App Store")
+                        Text("2. Open iSH and run:")
+                        Text("apk add git && git clone <repo-url>")
+                            .font(.system(.body, design: .monospaced))
+                            .padding(8)
+                            .background(Color(.tertiarySystemBackground))
+                            .cornerRadius(6)
+                        Text("3. Then run the installer:")
+                        Text("sh Test/ish-mini-llm/install.sh")
+                            .font(.system(.body, design: .monospaced))
+                            .padding(8)
+                            .background(Color(.tertiarySystemBackground))
+                            .cornerRadius(6)
+                        Text("4. Start MiniLLM:")
+                        Text("minillm")
+                            .font(.system(.body, design: .monospaced))
+                            .padding(8)
+                            .background(Color(.tertiarySystemBackground))
+                            .cornerRadius(6)
+                    }
+                    .font(.callout)
+                }
+
+                GroupBox("Features in iSH") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Download GGUF models from HuggingFace", systemImage: "arrow.down.circle")
+                        Label("Chat in terminal or via web browser", systemImage: "message")
+                        Label("OpenAI-compatible API server", systemImage: "network")
+                        Label("Create training datasets", systemImage: "brain")
+                        Label("Export datasets for fine-tuning", systemImage: "square.and.arrow.up")
+                    }
+                    .font(.callout)
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("iSH Install")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -187,11 +257,15 @@ struct StorageView: View {
 }
 
 struct PerformanceView: View {
+    @AppStorage("useMetal") private var useMetal = true
+    @AppStorage("batteryOptimize") private var batteryOptimize = false
+    @AppStorage("threadCount") private var threadCount = 4
+
     var body: some View {
         List {
             Section {
-                Toggle("Use Metal Acceleration", isOn: .constant(true))
-                Toggle("Optimize for Battery", isOn: .constant(false))
+                Toggle("Use Metal Acceleration", isOn: $useMetal)
+                Toggle("Optimize for Battery", isOn: $batteryOptimize)
             } header: {
                 Text("Inference")
             } footer: {
@@ -199,7 +273,7 @@ struct PerformanceView: View {
             }
 
             Section {
-                Picker("Thread Count", selection: .constant(4)) {
+                Picker("Thread Count", selection: $threadCount) {
                     Text("2 threads").tag(2)
                     Text("4 threads").tag(4)
                     Text("6 threads").tag(6)

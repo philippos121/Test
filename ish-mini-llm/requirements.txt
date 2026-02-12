@@ -1,0 +1,7 @@
+# MiniLLM Dependencies
+# Core inference engine (compile from source on iSH):
+#   CMAKE_ARGS="-DLLAMA_METAL=OFF" pip3 install llama-cpp-python
+llama-cpp-python>=0.2.0
+
+# All other functionality uses Python stdlib only.
+# No additional packages required!

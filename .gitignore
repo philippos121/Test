@@ -5,3 +5,21 @@ __pycache__/
 *.so
 .Python
 *.pyc
+
+# Models (too large for git)
+*.gguf
+*.gguf.part
+*.bin
+
+# MiniLLM data
+.minillm/
+
+# IDE
+.vscode/
+.idea/
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
