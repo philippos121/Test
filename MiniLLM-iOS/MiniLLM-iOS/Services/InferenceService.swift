@@ -8,85 +8,174 @@
 import Foundation
 
 actor InferenceService {
-    private var modelContext: OpaquePointer?
+    private var modelContext: UnsafeMutableRawPointer?
     private var isLoaded = false
+    private var modelPath: String?
 
+    // Configuration
+    private let contextSize: Int32 = 2048
+    private let threadCount: Int32 = 4
+
+    /// Load a GGUF model from file
     func loadModel(path: String) async throws {
-        // This would interface with llama.cpp
-        // For now, we'll simulate the interface
-        print("Loading model from: \(path)")
+        print("📥 [InferenceService] Loading model from: \(path)")
 
-        // In production, this would call:
-        // modelContext = llama_load_model_from_file(path, params)
+        // Check if file exists
+        guard FileManager.default.fileExists(atPath: path) else {
+            print("❌ [InferenceService] Model file not found at path")
+            throw ModelError.fileNotFound
+        }
 
-        isLoaded = true
+        // Get file size for logging
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+           let fileSize = attrs[.size] as? UInt64 {
+            let sizeMB = Double(fileSize) / 1024.0 / 1024.0
+            print("📦 [InferenceService] Model file size: \(String(format: "%.2f", sizeMB)) MB")
+        }
+
+        // Unload previous model if loaded
+        if isLoaded {
+            print("🔄 [InferenceService] Unloading previous model")
+            unloadModel()
+        }
+
+        // Load model using llama.cpp bridge
+        guard let context = LlamaCppBridge.loadModel(
+            withPath: path,
+            contextSize: contextSize,
+            threads: threadCount
+        ) else {
+            print("❌ [InferenceService] Failed to load model")
+            throw ModelError.loadFailed
+        }
+
+        self.modelContext = context
+        self.modelPath = path
+        self.isLoaded = true
+
+        print("✅ [InferenceService] Model loaded successfully")
+
+        // Get and log model info
+        let info = LlamaCppBridge.getModelInfo(context)
+        print("ℹ️ [InferenceService] Model info: \(info)")
     }
 
+    /// Unload the current model
     func unloadModel() {
-        guard isLoaded else { return }
+        guard isLoaded, let context = modelContext else { return }
 
-        // In production: llama_free_model(modelContext)
+        print("🗑️ [InferenceService] Unloading model")
+
+        LlamaCppBridge.freeModel(context)
         modelContext = nil
         isLoaded = false
+        modelPath = nil
+
+        print("✅ [InferenceService] Model unloaded")
     }
 
-    func generate(prompt: String, temperature: Double = 0.7, maxTokens: Int = 512) async -> String {
-        guard isLoaded else { return "Error: No model loaded" }
+    /// Generate text completion (non-streaming)
+    func generate(
+        prompt: String,
+        temperature: Double = 0.7,
+        maxTokens: Int = 512,
+        topP: Double = 0.9
+    ) async -> String {
+        guard isLoaded, let context = modelContext else {
+            return "❌ Error: No model loaded. Please load a model first."
+        }
 
-        // Simulate token generation
-        // In production, this would use llama.cpp's sampling and generation
-        var response = ""
+        print("🤖 [InferenceService] Generating response...")
+        print("📝 Prompt: \(prompt.prefix(100))\(prompt.count > 100 ? "..." : "")")
+        print("⚙️ Parameters: temp=\(temperature), maxTokens=\(maxTokens), topP=\(topP)")
 
-        // This is where you'd implement:
-        // 1. Tokenize the prompt
-        // 2. Run inference loop
-        // 3. Sample tokens with temperature
-        // 4. Decode tokens to text
+        let startTime = Date()
 
-        // Placeholder implementation
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s simulation
+        // Call llama.cpp bridge for generation
+        let response = LlamaCppBridge.generate(
+            with: context,
+            prompt: prompt,
+            maxTokens: Int32(maxTokens),
+            temperature: Float(temperature),
+            topP: Float(topP)
+        )
 
-        response = "This is a simulated response. In production, this would use llama.cpp to generate text based on your prompt: '\(prompt)'. The actual implementation would tokenize, run the model, and decode the output."
+        let elapsed = Date().timeIntervalSince(startTime)
+        print("⏱️ [InferenceService] Generation completed in \(String(format: "%.2f", elapsed))s")
 
         return response
     }
 
+    /// Generate text with streaming (calls callback for each token)
     func generateStreaming(
         prompt: String,
         temperature: Double = 0.7,
         maxTokens: Int = 512,
+        topP: Double = 0.9,
         onToken: @escaping (String) -> Void
     ) async {
-        guard isLoaded else {
-            onToken("Error: No model loaded")
+        guard isLoaded, let context = modelContext else {
+            onToken("❌ Error: No model loaded")
             return
         }
 
-        // Simulate streaming response
-        let words = "This is a simulated streaming response. In production, llama.cpp would generate tokens one by one.".components(separatedBy: " ")
+        print("🌊 [InferenceService] Starting streaming generation...")
 
-        for word in words {
-            onToken(word + " ")
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s per word
+        // Use llama.cpp bridge streaming
+        LlamaCppBridge.generateStream(
+            with: context,
+            prompt: prompt,
+            maxTokens: Int32(maxTokens),
+            temperature: Float(temperature),
+            topP: Float(topP)
+        ) { token in
+            // Forward token to caller on main actor
+            Task { @MainActor in
+                onToken(token)
+            }
         }
+
+        print("✅ [InferenceService] Streaming completed")
+    }
+
+    /// Check if a model is currently loaded
+    func isModelLoaded() -> Bool {
+        return isLoaded
+    }
+
+    /// Get the path of the currently loaded model
+    func getCurrentModelPath() -> String? {
+        return modelPath
+    }
+
+    /// Get model information
+    func getModelInfo() -> [String: Any] {
+        guard isLoaded, let context = modelContext else {
+            return ["error": "No model loaded"]
+        }
+
+        return LlamaCppBridge.getModelInfo(context) as? [String: Any] ?? [:]
     }
 }
 
-// MARK: - llama.cpp Bridge Interface
-// In production, you would create a C/Objective-C++ bridge to llama.cpp
+// MARK: - Error Types
 
-/*
- Example bridge structure:
+enum ModelError: Error {
+    case fileNotFound
+    case loadFailed
+    case contextCreationFailed
+    case generationFailed
 
- 1. Create LlamaCppBridge.h/.mm Objective-C++ wrapper
- 2. Include llama.cpp headers
- 3. Implement methods:
-    - loadModel(path:) -> UnsafeMutableRawPointer?
-    - generateTokens(context:prompt:maxTokens:temperature:)
-    - freeModel(context:)
-
- 4. Import into Swift via bridging header
- 5. Call from InferenceService
-
- This allows Swift to interface with C++ llama.cpp library
- */
+    var localizedDescription: String {
+        switch self {
+        case .fileNotFound:
+            return "Model file not found at specified path"
+        case .loadFailed:
+            return "Failed to load model into memory"
+        case .contextCreationFailed:
+            return "Failed to create inference context"
+        case .generationFailed:
+            return "Text generation failed"
+        }
+    }
+}
